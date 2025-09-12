@@ -1,13 +1,19 @@
-class ApiError extends Error {
-     
-    statusCode : number;
+import { NextFunction, Response, Request } from "express";
 
-    constructor(statusCode : number, message : string){
-        super(message);
-        this.statusCode = statusCode;
-        Error.captureStackTrace(this, this.constructor)
-    }
+class AppError extends Error {
+  public statusCode: number;
+  public status: string;
+  public isOperational: boolean;
 
+  constructor(message: string, statusCode: number) {
+    super(message);
+
+    this.statusCode = statusCode;
+    this.status = `${statusCode}`.startsWith("4") ? "fail" : "error";
+    this.isOperational = true; // Distinguishes between operational errors and programming errors
+
+    Error.captureStackTrace(this, this.constructor);
+  }
 }
 
-export default ApiError;
+export default AppError;

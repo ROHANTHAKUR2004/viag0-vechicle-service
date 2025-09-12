@@ -17,11 +17,11 @@ export const createBus = asyncHandler(async (req: Request, res: Response) => {
     !body.arrivalAt ||
     !body.currentLocation
   ) {
-    throw new ApiError(400, "Vehicle information required");
+    throw new ApiError( "Vehicle information required", 400);
   }
 
   if (!body.source || !body.destination) {
-    throw new ApiError(400, "Vehicle route information required");
+    throw new ApiError( "Vehicle route information required", 400);
   }
 
   const totalSeats = Number(body.totalSeats) || body.capacity;
@@ -69,7 +69,7 @@ export const listVehicles = asyncHandler(async (req: Request, res: Response) => 
 
   const { source, destination, date } = req.query;
   if (!source || !destination) {
-    throw new ApiError(400, "Both source and destination are required");
+    throw new ApiError( "Both source and destination are required", 400);
   }
 
   // Date filter
