@@ -3,6 +3,7 @@ import VehicleModel, { IVehicle } from "../models/vechicle.model";
 import ApiError from "../utlis/ApiError";
 import ApiResponse from "../utlis/ApiResponse";
 import asyncHandler from "../utlis/asyncHandler";
+import SearchService from "../services/search.service";
 
 export const createBus = asyncHandler(async (req: Request, res: Response) => {
    console.log("Request body =>", req.body);
@@ -165,6 +166,27 @@ export const listVehicles = asyncHandler(async (req: Request, res: Response) => 
 });
 
 
+export const searchVehicles = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { source, destination, ...filter } = req.query;
+
+    // Validate required params
+    if (!source || !destination) {
+      return res.status(400).json({ message: "Source and destination are required" });
+    }
+
+    // Ensure they're strings
+    const sourceStr = String(source);
+    const destinationStr = String(destination);
+
+    const vehicles = await SearchService.findIndirectVehicles(sourceStr, destinationStr, filter);
+
+    return res.status(200).json({ vehicles });
+  } catch (error) {
+    console.error("Error in getIndirectVehicles:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
 
 

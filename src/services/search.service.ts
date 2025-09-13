@@ -10,7 +10,7 @@ import ApiError from "../utlis/ApiError";
 /**
  * Core Search Service
  */
-class SearchService {
+export default class SearchService {
   /**
    * Find direct vehicles between source and destination
    */
