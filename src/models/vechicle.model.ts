@@ -8,6 +8,9 @@ export interface ISeat {
   price: number;
   from?: string;
   to?: string;
+  isLocked?: boolean;
+  lockedUntil?: Date;
+  lockedBy?: string; // bookingId or sessionId
 }
 
 /** Route Stop Interface */
@@ -23,6 +26,8 @@ export interface IRouteStop {
 
 /** Vehicle Document Interface */
 export interface IVehicle extends Document {
+  _id: mongoose.Types.ObjectId;
+
   vehicleNumber: string;
   type: string;
   capacity: number;
@@ -45,6 +50,10 @@ export interface IVehicle extends Document {
   delayMinutes: number;
   isActive: boolean;
 
+  // For seat locking optimization
+  lastSeatUpdate: Date;
+  seatLockVersion: number; // For optimistic locking
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,6 +66,9 @@ const SeatSchema = new Schema<ISeat>({
   price: { type: Number, required: true, min: 0 },
   from: { type: String },
   to: { type: String },
+  isLocked: { type: Boolean, default: false },
+  lockedUntil: { type: Date },
+  lockedBy: { type: String },
 });
 
 const RouteStopSchema = new Schema<IRouteStop>({
@@ -101,11 +113,15 @@ const VehicleSchema = new Schema<IVehicle>(
 
     delayMinutes: { type: Number, default: 0, min: 0 },
     isActive: { type: Boolean, default: true },
+
+    lastSeatUpdate: { type: Date, default: Date.now },
+    seatLockVersion: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
 
 VehicleSchema.index({ source: 1, destination: 1, departureAt: 1 });
 VehicleSchema.index({ "currentLocation.updatedAt": 1 });
+VehicleSchema.index({ "seats.isLocked": 1, "seats.lockedUntil": 1 });
 
 export default mongoose.model<IVehicle>("Vehicle", VehicleSchema);

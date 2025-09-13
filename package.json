@@ -36,7 +36,9 @@
     "cors": "^2.8.5",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.0",
+    "node-cron": "^4.2.1",
     "rascal": "^20.1.1",
+    "razorpay": "^2.9.6",
     "redis": "^5.8.2",
     "socket.io": "^4.8.1",
     "uuid": "^13.0.0"
