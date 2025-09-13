@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import CacheService from "../utlis/cacheService.utlis";
 import VehicleModel from "../models/vechicle.model";
 import redisCache from "../config/redis.config";
-import rabbitMQ from "../config/rabbitmq.config"
+import rabbitMQ from "../config/rabbitmq.config";
 import asyncHandler from "../utlis/asyncHandler";
 import ApiResponse from "../utlis/ApiResponse";
 import ApiError from "../utlis/ApiError";
@@ -187,8 +187,8 @@ class MessageQueueService {
   ): Promise<void> {
     await rabbitMQ.receiveMessages(this.SEARCH_QUEUE, async (msg) => {
       if (!msg) return;
+      const data = JSON.parse(msg.content.toString());
       try {
-        const data = JSON.parse(msg.content.toString());
         const result = await callback(data);
         await redisCache.publish(`search-result:${data.requestId}`, {
           success: true,
