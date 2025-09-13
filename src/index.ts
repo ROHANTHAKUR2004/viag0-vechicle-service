@@ -8,6 +8,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import http from "http";
 import cookieParser from "cookie-parser";
 import rabbitMQ from "./config/rabbitmq.config";
+import { seatBookingconsumer } from "./consumers/seat-booking.consumer";
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
@@ -24,7 +25,8 @@ app.use("/api/vehicles", vehicleRoutes);
 export async function startServer() {
   await connectDB();
   await redisCache.connect();
-  await rabbitMQ['connect']()
+  await rabbitMQ['connect']();
+  await seatBookingconsumer()
   io.adapter(createAdapter(redisCache.pubClient, redisCache.subClient));
   io.on("connection", (socket: Socket) => {
     if (io) {
