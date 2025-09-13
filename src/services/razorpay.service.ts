@@ -1,77 +1,133 @@
-import { razorpay } from '../config/razorpay.config';
-import crypto from 'crypto';
+import { RazorpayService as RazorpayConfig } from "../config/razorpay.config";
+import { ENV } from "../config/env";
+import ApiError from "../utlis/ApiError";
 
+/**
+ * Razorpay service for payment operations
+ */
 class RazorpayService {
-  private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 1000;
-
-  async createOrder(orderData: any, retryCount = 0): Promise<any> {
+  /**
+   * Create a new payment order
+   */
+  static async createPaymentOrder(params: {
+    amount: number;
+    currency?: string;
+    receipt: string;
+    notes?: Record<string, string>;
+    timeout?: number;
+  }) {
     try {
-      const order = await razorpay.orders.create(orderData);
-      return order;
+      const order = await RazorpayConfig.createOrder(params);
+      return {
+        success: true,
+        order,
+      };
     } catch (error) {
-      if (retryCount < this.MAX_RETRIES) {
-        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * (retryCount + 1)));
-        return this.createOrder(orderData, retryCount + 1);
-      }
-      throw error;
+      console.error('❌ Failed to create payment order:', error);
+      throw ApiError.payment('Failed to create payment order', error);
     }
   }
 
-  validateWebhookSignature(orderId: string, paymentId: string, signature: string): boolean {
-    const body = `${orderId}|${paymentId}`;
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET!)
-      .update(body)
-      .digest('hex');
-
-    return expectedSignature === signature;
-  }
-
-  async processRefund(paymentId: string, refundData: any, retryCount = 0): Promise<any> {
+  /**
+   * Verify payment signature
+   */
+  static async verifyPayment(params: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }): Promise<boolean> {
     try {
-      const refund = await razorpay.payments.refund(paymentId, refundData);
-      return refund;
+      return RazorpayConfig.verifyPaymentSignature(params);
     } catch (error) {
-      if (retryCount < this.MAX_RETRIES) {
-        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * (retryCount + 1)));
-        return this.processRefund(paymentId, refundData, retryCount + 1);
-      }
-      throw error;
+      console.error('❌ Failed to verify payment:', error);
+      throw ApiError.payment('Failed to verify payment', error);
     }
   }
 
-  async getPaymentDetails(paymentId: string): Promise<any> {
+  /**
+   * Create a refund
+   */
+  static async createRefund(params: {
+    paymentId: string;
+    amount?: number;
+    notes?: Record<string, string>;
+    speed?: 'optimum' | 'normal';
+  }) {
     try {
-      return await razorpay.payments.fetch(paymentId);
+      const refund = await RazorpayConfig.createRefund(params);
+      return {
+        success: true,
+        refund,
+      };
     } catch (error) {
-      console.error('Error fetching payment details:', error);
-      throw error;
+      console.error('❌ Failed to create refund:', error);
+      throw ApiError.payment('Failed to create refund', error);
     }
   }
 
-  async getOrderDetails(orderId: string): Promise<any> {
+  /**
+   * Get payment details
+   */
+  static async getPaymentDetails(paymentId: string) {
     try {
-      return await razorpay.orders.fetch(orderId);
+      const payment = await RazorpayConfig.getPayment(paymentId);
+      return {
+        success: true,
+        payment,
+      };
     } catch (error) {
-      console.error('Error fetching order details:', error);
-      throw error;
+      console.error('❌ Failed to get payment details:', error);
+      throw ApiError.payment('Failed to get payment details', error);
     }
   }
 
-  async verifyPayment(orderId: string, paymentId: string): Promise<boolean> {
+  /**
+   * Get refund details
+   */
+  static async getRefundDetails(refundId: string) {
     try {
-      const order = await this.getOrderDetails(orderId);
-      const payment = await this.getPaymentDetails(paymentId);
-
-      return order.status === 'paid' &&
-             payment.status === 'captured' &&
-             payment.order_id === orderId;
+      const refund = await RazorpayConfig.getRefund(refundId);
+      return {
+        success: true,
+        refund,
+      };
     } catch (error) {
-      console.error('Error verifying payment:', error);
+      console.error('❌ Failed to get refund details:', error);
+      throw ApiError.payment('Failed to get refund details', error);
+    }
+  }
+
+  /**
+   * Calculate refund amount based on cancellation policy
+   */
+  static calculateRefundAmount(
+    totalAmount: number,
+    cancellationTime: Date,
+    departureTime: Date
+  ): number {
+    try {
+      return RazorpayConfig.calculateRefundAmount(
+        totalAmount,
+        cancellationTime,
+        departureTime
+      );
+    } catch (error) {
+      console.error('❌ Failed to calculate refund amount:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Validate webhook signature
+   */
+  static validateWebhookSignature(body: string, signature: string): boolean {
+    try {
+      return RazorpayConfig.verifyWebhookSignature(body, signature);
+    } catch (error) {
+      console.error('❌ Failed to validate webhook signature:', error);
       return false;
     }
   }
 }
 
-export default new RazorpayService();
+export default RazorpayService;
