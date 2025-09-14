@@ -229,24 +229,6 @@ class bookingController {
           break;
         }
 
-        case "order.created": {
-          console.log(
-            `Order created by Razorpay: Order ID ${payload.order.entity.id}`
-          );
-          break;
-        }
-
-        case "order.updated": {
-          console.log(`Order updated: Order ID ${payload.order.entity.id}`);
-          break;
-        }
-
-        case "payment.authorized": {
-          const payment = payload.payment.entity;
-          console.log(`Payment authorized: Payment ID ${payment.id}`);
-          break;
-        }
-
         case "refund.failed": {
           const refund = payload.refund.entity;
           console.error(`Refund failed for payment: ${refund.payment_id}`);
