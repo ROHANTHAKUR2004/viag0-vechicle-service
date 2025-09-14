@@ -14,8 +14,17 @@ export interface IBookedSeat {
   to: string;
 }
 
+export interface IPaymentDetails {
+  method: string;              
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+  amountPaid: number;
+  paidAt: Date;
+}
+
 export interface IBooking extends Document {
-  bookingId: string; // external UUID
+  bookingId: string;
   userId: mongoose.Types.ObjectId;
   vehicleId: mongoose.Types.ObjectId;
   departureAt: Date;
@@ -28,6 +37,7 @@ export interface IBooking extends Document {
 
   paymentId?: string;
   idempotencyKey?: string;
+  paymentDetails?: IPaymentDetails;
 
   createdAt: Date;
   updatedAt: Date;
@@ -41,7 +51,20 @@ const BookedSeatSchema = new Schema<IBookedSeat>(
     from: { type: String, required: true },
     to: { type: String, required: true },
   },
-  { _id: false } // don’t need extra _id for embedded docs
+  { _id: false }
+);
+
+/** Payment Details Schema (embedded in booking) */
+const PaymentDetailsSchema = new Schema<IPaymentDetails>(
+  {
+    method: { type: String, required: true },
+    razorpayOrderId: { type: String, required: true },
+    razorpayPaymentId: { type: String, required: true, unique: true },
+    razorpaySignature: { type: String, required: true },
+    amountPaid: { type: Number, required: true, min: 0 },
+    paidAt: { type: Date, required: true },
+  },
+  { _id: false }
 );
 
 /** Booking Schema */
@@ -72,11 +95,13 @@ const BookingSchema = new Schema<IBooking>(
 
     paymentId: { type: String },
     idempotencyKey: { type: String, index: true },
+
+    paymentDetails: { type: PaymentDetailsSchema },  // Razorpay payment info
   },
   { timestamps: true }
 );
 
-// Composite index to avoid seat overbooking conflicts (for safety checks)
+// Composite index to prevent seat overbooking
 BookingSchema.index({
   vehicleId: 1,
   departureAt: 1,

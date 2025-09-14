@@ -134,6 +134,21 @@ class RedisCache {
     const key = `seat:lock:${vehicleId}:${seatNumber}`;
     await this.delete(key);
   }
+  public async extendSeatLockTtl(
+  vehicleId: string,
+  seatNumber: string,
+  additionalTtl: number
+): Promise<boolean> {
+  const key = `seat:lock:${vehicleId}:${seatNumber}`;
+
+  const isLocked = await this.exists(key);
+  if (!isLocked) {
+    return false; // Seat is not locked, cannot extend TTL
+  }
+
+  const result = await this.client.expire(key, additionalTtl);
+  return result === 1; // 1 = TTL updated successfully, 0 = failed
+};
 }
 const redisCache: RedisCache = new RedisCache();
 export default redisCache;
