@@ -134,6 +134,13 @@ class RedisCache {
     const key = `seat:lock:${vehicleId}:${seatNumber}`;
     await this.delete(key);
   }
+  public async unlockSeats(vehicleId: string, seatNumbers: string[]) {
+  for (const seat of seatNumbers) {
+    await this.unlockSeat(vehicleId, seat);
+  }
+  console.log(`Unlocked seats [${seatNumbers.join(", ")}] for vehicle ${vehicleId}`);
+}
+
   public async extendSeatLockTtl(
   vehicleId: string,
   seatNumber: string,
