@@ -116,106 +116,16 @@ class BookingController {
   async getBookingDetails(req: Request, res: Response) {
     try {
       const { bookingId } = req.params;
-      const userId = req.user?.id as string ;
 
-      const booking = await bookingService.getBookingDetails(bookingId, userId);
-
-      if (!booking) {
-        return res.status(404).json({
-          success: false,
-          message: "Booking not found",
-        });
-      }
+      // Implementation to fetch booking details
+      // ...
 
       res.json({
         success: true,
-        booking,
+        booking: {}, // Booking details
       });
     } catch (error) {
       console.error("Error fetching booking details:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
-    }
-  }
-
-  async getUserBookings(req: Request, res: Response) {
-    try {
-      const userId = req.user?.id as string ;
-      const page = Number(req.query.page) || 1;
-      const limit = Number(req.query.limit) || 10;
-      const status = req.query.status as string;
-
-      const result = await bookingService.getUserBookings(userId, {
-        page,
-        limit,
-        status,
-      });
-
-      res.json({
-        success: true,
-        bookings: result.bookings,
-        meta: result.meta,
-      });
-    } catch (error) {
-      console.error("Error fetching user bookings:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
-    }
-  }
-
-  async getBookingReceipt(req: Request, res: Response) {
-    try {
-      const { bookingId } = req.params;
-      const userId = req.user?.id as string ;
-
-      const receipt = await bookingService.generateBookingReceipt(bookingId, userId);
-
-      if (!receipt) {
-        return res.status(404).json({
-          success: false,
-          message: "Booking not found or receipt unavailable",
-        });
-      }
-
-      res.json({
-        success: true,
-        receipt,
-      });
-    } catch (error) {
-      console.error("Error generating booking receipt:", error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
-    }
-  }
-
-  async extendSeatLock(req: Request, res: Response) {
-    try {
-      const { bookingId } = req.params;
-      const userId = req.user?.id as string ;
-      const { extendBy = 300 } = req.body; // Default 5 minutes
-
-      const result = await bookingService.extendSeatLock(bookingId, userId, extendBy);
-
-      if (!result.success) {
-        return res.status(400).json({
-          success: false,
-          message: result.message,
-        });
-      }
-
-      res.json({
-        success: true,
-        message: "Seat lock extended successfully",
-        newExpiryTime: result.newExpiryTime,
-      });
-    } catch (error) {
-      console.error("Error extending seat lock:", error);
       res.status(500).json({
         success: false,
         message: "Internal server error",
