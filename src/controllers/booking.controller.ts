@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { razorpayInstance } from "../config/razorpay.config";
 import bookingModel, { BookingStatus } from "../models/booking.model";
 import crypto from "crypto";
+import { scheduleUnlockSeatJob } from "../queues/bullmq/producers/scheduleUnlockSeat.producer";
 class bookingController {
   public async reserveSeat(req: Request, res: Response, next: NextFunction) {
     try {
@@ -117,6 +118,8 @@ class bookingController {
       });
 
       await booking.save();
+      const ttlMs = 10 * 60 * 1000; // 10 minutes
+      await scheduleUnlockSeatJob(booking.bookingId, ttlMs);
 
       return res.status(201).json({
         message: "Your order has been created successfully",
