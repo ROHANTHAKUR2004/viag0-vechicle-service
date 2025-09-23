@@ -15,7 +15,7 @@ export interface IBookedSeat {
 }
 
 export interface IPaymentDetails {
-  method: string;              
+  method: string;
   razorpayOrderId: string;
   razorpayPaymentId: string;
   razorpaySignature: string;
@@ -96,7 +96,7 @@ const BookingSchema = new Schema<IBooking>(
     paymentId: { type: String },
     idempotencyKey: { type: String, index: true },
 
-    paymentDetails: { type: PaymentDetailsSchema },  // Razorpay payment info
+    paymentDetails: { type: PaymentDetailsSchema }, // Razorpay payment info
   },
   { timestamps: true }
 );

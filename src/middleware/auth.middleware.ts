@@ -5,7 +5,6 @@ import ApiError from "../utlis/ApiError"
 
 export interface JWT_PAYLOAD extends JwtPayload {
   id: string;
-  
 }
 
 
@@ -17,11 +16,14 @@ export const isAuthenticated = async (
   try {
     const token = req.cookies?.token || req.headers.authorization?.split(" ")[1];
 
+    console.log("usr token", token)
+
     if (!token) {
       return next(new ApiError( "Unauthorized – No token provided", 401));
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JWT_PAYLOAD;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string ) as JWT_PAYLOAD;
+    console.log("decoded ", decoded);
     if(!decoded){
       return next(new ApiError( "Please Login to Continue your token has been expired ", 401))
     }

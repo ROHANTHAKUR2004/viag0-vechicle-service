@@ -6,12 +6,13 @@ import { razorpayInstance } from "../config/razorpay.config";
 import bookingModel, { BookingStatus } from "../models/booking.model";
 import crypto from "crypto";
 import { scheduleUnlockSeatJob } from "../queues/bullmq/producers/scheduleUnlockSeat.producer";
-class bookingController {
+
+class BookingController {
   public async reserveSeat(req: Request, res: Response, next: NextFunction) {
     try {
       const { vehicleId, departureAt, seats, price } = req.body;
-
-      const userId = req.user?.id; // assume middleware sets req.user
+      const userId = req.user?.id;
+      console.log(userId);
       const bookingId = uuidv4();
       const idempotencyKey = req.headers["idempotency-key"] as string;
       const ttl = 2 * 60; // 2 mins
@@ -21,6 +22,7 @@ class bookingController {
         return res.status(400).json({ error: "Vehicle ID and seats required" });
       }
 
+      // Check if any seat is already locked
       for (const seat of seats) {
         const isLocked = await redisCache.isSeatLocked(vehicleId, seat);
         if (isLocked) {
@@ -30,14 +32,20 @@ class bookingController {
         }
       }
 
+      // Lock all seats
       for (const seat of seats) {
         const locked = await redisCache.lockSeat(vehicleId, seat, ttl);
         if (!locked) {
+          // If any seat fails to lock, unlock all previously locked seats
+          for (const s of seats) {
+            await redisCache.unlockSeat(vehicleId, s);
+          }
           return res.status(409).json({
             error: `Failed to lock seat ${seat}, already taken`,
           });
         }
       }
+
       const bookingPayload = {
         bookingId,
         userId,
@@ -51,8 +59,19 @@ class bookingController {
       };
 
       await rabbitMQ.sendMessage("book_seat", JSON.stringify(bookingPayload));
-    } catch (error) {}
+
+      res.status(200).json({
+        message: "Seats reserved successfully",
+        userId,
+        bookingId,
+        expiresAt,
+      });
+    } catch (error) {
+      console.error("Reserve seat error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
+
   public async extendSeatLockDuringPayment(
     req: Request,
     res: Response,
@@ -66,7 +85,6 @@ class bookingController {
       }
 
       const extendedTtl = 10 * 60; // 10 minutes during payment flow
-
       let allExtended = true;
 
       for (const seat of seats) {
@@ -90,16 +108,18 @@ class bookingController {
         .status(200)
         .json({ message: "Seat lock extended successfully" });
     } catch (error) {
+      console.error("Extend seat lock error:", error);
       return res.status(500).json({ error: "Internal server error" });
     }
   }
+
   async createBookingOrder(req: Request, res: Response) {
     try {
       const { userId, vehicleId, departureAt, seats, totalPrice, expiresAt } =
         req.body;
 
       const razorpayOrder = await razorpayInstance.orders.create({
-        amount: totalPrice * 100, // Convert to smallest currency unit (paise)
+        amount: totalPrice * 100,
         currency: "INR",
         receipt: `receipt_${new Date().getTime()}`,
         payment_capture: true,
@@ -114,7 +134,7 @@ class bookingController {
         totalPrice,
         status: BookingStatus.PENDING,
         expiresAt,
-        paymentId: razorpayOrder.id, // Now properly typed
+        paymentId: razorpayOrder.id,
       });
 
       await booking.save();
@@ -124,12 +144,64 @@ class bookingController {
       return res.status(201).json({
         message: "Your order has been created successfully",
         orderId: razorpayOrder.id,
+        bookingId: booking.bookingId,
       });
     } catch (err) {
       console.error("Order creation error:", err);
       return res.status(500).json({ error: "Could not create order" });
     }
   }
+
+  public async processRefund(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { bookingId } = req.params;
+      const { speed = "normal" } = req.body;
+
+      const booking = await bookingModel.findOne({ bookingId });
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      if (booking.status !== BookingStatus.CONFIRMED) {
+        return res
+          .status(400)
+          .json({ error: "Only confirmed bookings can be refunded" });
+      }
+
+      if (!booking.paymentDetails?.razorpayPaymentId) {
+        return res.status(400).json({ error: "Payment not captured" });
+      }
+
+      // Initiate refund via Razorpay
+      const refund = await razorpayInstance.payments.refund(
+        booking.paymentDetails.razorpayPaymentId,
+        {
+          amount: booking.totalPrice * 100,
+          speed,
+          notes: {
+            bookingId,
+            reason: "Cancellation by user",
+          },
+        }
+      );
+
+      // Update booking status
+      booking.status = BookingStatus.CANCELLED;
+      await booking.save();
+      const seatNumbers = booking.seats.map((s) => s.seatNumber);
+      // Release locked seats
+      await redisCache.unlockSeats(booking.vehicleId.toString(), seatNumbers);
+
+      res.json({
+        message: "Refund initiated successfully",
+        refundId: refund.id,
+      });
+    } catch (error) {
+      console.error("Refund error:", error);
+      res.status(500).json({ error: "Refund processing failed" });
+    }
+  }
+
   public async razorpayWebhookHandler(
     req: Request,
     res: Response,
@@ -139,7 +211,7 @@ class bookingController {
     const body = JSON.stringify(req.body);
 
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.WEBHOOK_SECRET as string)
+      .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET as string)
       .update(body)
       .digest("hex");
 
@@ -160,8 +232,9 @@ class bookingController {
           const booking = await bookingModel.findOne({
             paymentId: razorpayOrderId,
           });
-          if (!booking)
+          if (!booking) {
             return res.status(404).json({ message: "Booking not found" });
+          }
 
           booking.status = BookingStatus.CONFIRMED;
           booking.paymentDetails = {
@@ -190,9 +263,30 @@ class bookingController {
           if (booking) {
             booking.status = BookingStatus.CANCELLED;
             await booking.save();
+
+            // Unlock seats on payment failure
+            const seatNumbers = booking.seats.map((s) => s.seatNumber);
+            // Release locked seats
+            await redisCache.unlockSeats(
+              booking.vehicleId.toString(),
+              seatNumbers
+            );
+
             console.log(
               `Booking ${booking.bookingId} cancelled due to payment failure.`
             );
+
+            // If payment was authorized but not captured, process refund
+            if (payment.status === "authorized") {
+              await rabbitMQ.sendMessage(
+                "process_refund",
+                JSON.stringify({
+                  bookingId: booking.bookingId,
+                  paymentId: payment.id,
+                  amount: payment.amount / 100,
+                })
+              );
+            }
           }
           break;
         }
@@ -208,6 +302,15 @@ class bookingController {
           if (booking) {
             booking.status = BookingStatus.CANCELLED;
             await booking.save();
+
+            // Release seats on successful refund
+            const seatNumbers = booking.seats.map((s) => s.seatNumber);
+            // Release locked seats
+            await redisCache.unlockSeats(
+              booking.vehicleId.toString(),
+              seatNumbers
+            );
+
             console.log(
               `Booking ${booking.bookingId} marked cancelled due to refund.`
             );
@@ -236,6 +339,15 @@ class bookingController {
           const refund = payload.refund.entity;
           console.error(`Refund failed for payment: ${refund.payment_id}`);
 
+          // Notify admin or trigger alternative refund process
+          await rabbitMQ.sendMessage(
+            "refund_failed_notification",
+            JSON.stringify({
+              paymentId: refund.payment_id,
+              refundId: refund.id,
+              amount: refund.amount / 100,
+            })
+          );
           break;
         }
 
@@ -247,9 +359,9 @@ class bookingController {
       return res.status(200).json({ status: "success" });
     } catch (err) {
       console.error("Error handling webhook:", err);
-
       return res.status(500).json({ error: "Internal server error" });
     }
   }
 }
-export default bookingController;
+
+export default new BookingController();

@@ -13,6 +13,12 @@ export const scheduleUnlockSeatJob = async (
   await seatUnlockQueue.add(
     "unlockSeats",
     { bookingId },
-    { delay: ttlMs, removeOnComplete: true, removeOnFail: true }
+    {
+      delay: ttlMs,
+      removeOnComplete: true, // keeps Redis clean after success
+      removeOnFail: false, // keep failed jobs for inspection
+      attempts: 3, // auto-retry 3 times
+      backoff: { type: "exponential", delay: 5000 }, // retry with delay
+    }
   );
 };
